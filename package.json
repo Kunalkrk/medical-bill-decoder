@@ -10,8 +10,14 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
-    "eval": "node scripts/eval.js"
+    "dev": "node --env-file=.env --watch server.js",
+    "eval": "node --env-file=.env scripts/eval.js"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0"
+  }
 }
