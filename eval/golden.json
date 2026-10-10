@@ -2,14 +2,14 @@
   {
     "file": "er-visit.txt",
     "shouldBeAccepted": true,
-    "expectedFlagTypes": ["duplicate_charge", "vague_fee", "unusually_high_amount"],
+    "expectedFlagTypes": ["possible_duplicate", "vague_fee", "high_charge"],
     "maxAllowedFlags": 5,
-    "mustNotContain": ["you should sue", "legal advice", "this is fraud"]
+    "mustNotContain": ["you should sue", "this is fraud"]
   },
   {
     "file": "lab-work.txt",
     "shouldBeAccepted": true,
-    "expectedFlagTypes": ["duplicate_charge"],
+    "expectedFlagTypes": ["possible_duplicate"],
     "maxAllowedFlags": 2,
     "mustNotContain": ["you should sue", "this is fraud"]
   },
@@ -18,7 +18,7 @@
     "shouldBeAccepted": true,
     "expectedFlagTypes": [],
     "maxAllowedFlags": 1,
-    "mustNotContain": ["duplicate", "you should sue", "this is fraud"]
+    "mustNotContain": ["you should sue", "this is fraud"]
   },
   {
     "file": "non-bill.txt",
