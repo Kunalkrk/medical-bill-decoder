@@ -138,7 +138,7 @@ The accessibility of the interface depends on the Lovable frontend, which is not
 
 - Goals for the frontend: semantic HTML, labelled form controls, full keyboard navigation with visible focus, sufficient color contrast, and an `aria-live` region so screen readers announce results, with flag severity conveyed in text and not by color alone.
 - API support: explanations are written at roughly an 8th-grade reading level, responses are structured so the UI can present them in order, and errors are short, human-readable messages.
-- Not yet verified: no automated or manual accessibility audit (for example axe or a screen-reader pass) has been run on the frontend.
+- Verification: Lighthouse accessibility scans were run on the published Lovable app on 2026-10-10: score 100 on the initial page, and all 27 audits passed in snapshot mode on the results view after analyzing a sample bill. Automated scans catch only part of the possible issues. No screen-reader test has been done.
 
 ## Known limitations
 
