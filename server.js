@@ -38,7 +38,8 @@ app.use(
 );
 app.use(express.json({ limit: "100kb" }));
 
-// TODO: GET /api/health — liveness for Render (e.g. { status: "ok" })
+app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+
 app.get("/api/samples", async (req, res) => {
   try {
     const files = (await readdir(SAMPLES_DIR)).filter((f) => f.endsWith(".txt")).sort();

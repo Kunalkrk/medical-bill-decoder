@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: medical-bill-decoder
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: ANTHROPIC_API_KEY
+        sync: false # set in the Render dashboard, never committed
+      - key: ALLOWED_ORIGINS
+        sync: false # comma-separated frontend origins, e.g. https://your-app.lovable.app
