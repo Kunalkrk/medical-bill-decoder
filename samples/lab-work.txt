@@ -1,0 +1,17 @@
+SYNTHETIC SAMPLE, NOT REAL PATIENT DATA
+
+Lakeside Example Diagnostics
+Statement date: 05/20/2025
+Patient: John R. Sample    Account: 000-TEST-0002
+Date of service: 05/12/2025
+
+Description                              Code    Qty   Amount
+Comprehensive metabolic panel            80053    1      $210.00
+Metabolic panel, comprehensive           80053    1      $210.00
+Lipid panel                              80061    1      $95.00
+Venipuncture, blood draw                 36415    1      $18.00
+
+Total charges:                                           $533.00
+Insurance adjustments:                                  -$301.00
+Insurance payments:                                     -$150.00
+Patient responsibility:                                   $82.00

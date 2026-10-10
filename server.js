@@ -3,10 +3,14 @@
 
 import express from "express";
 import cors from "cors";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 // import Anthropic from "@anthropic-ai/sdk";
 // import { validateInput, validateOutput } from "./guardrails.js";
 
 const MODEL = "claude-sonnet-5-5";
+const SAMPLES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "samples");
 const PORT = process.env.PORT || 3000;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:3000")
   .split(",")
@@ -29,7 +33,21 @@ app.use(
 // TODO: in-memory metrics counters
 
 // TODO: GET /api/health — liveness for Render (e.g. { status: "ok" })
-// TODO: GET /api/samples — read ./samples and return the sample bills as JSON
+app.get("/api/samples", async (req, res) => {
+  try {
+    const files = (await readdir(SAMPLES_DIR)).filter((f) => f.endsWith(".txt")).sort();
+    const samples = await Promise.all(
+      files.map(async (f) => ({
+        name: f.replace(/\.txt$/, ""),
+        text: await readFile(path.join(SAMPLES_DIR, f), "utf8"),
+      }))
+    );
+    res.json(samples);
+  } catch {
+    res.status(500).json({ error: "Could not load samples" });
+  }
+});
+
 // TODO: GET /api/metrics — aggregate counters as JSON
 // TODO: POST /api/decode
 //   1. validateInput(text)

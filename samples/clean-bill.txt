@@ -1,0 +1,16 @@
+SYNTHETIC SAMPLE, NOT REAL PATIENT DATA
+
+Maple Grove Example Clinic
+Statement date: 07/08/2025
+Patient: Alex T. Sample    Account: 000-TEST-0003
+Date of service: 06/25/2025
+
+Description                              Code    Qty   Amount
+Office visit, established patient, lvl 3 99213    1      $180.00
+Influenza vaccine administration         90471    1       $30.00
+Influenza vaccine, quadrivalent          90686    1       $55.00
+
+Total charges:                                           $265.00
+Insurance adjustments (contracted rate):                -$110.00
+Insurance payments:                                     -$135.00
+Patient responsibility (copay):                           $20.00

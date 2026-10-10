@@ -1,0 +1,19 @@
+SYNTHETIC SAMPLE, NOT REAL PATIENT DATA
+
+Riverbend Example Hospital - Emergency Department
+Statement date: 03/14/2025
+Patient: Jane Q. Sample    Account: 000-TEST-0001
+Date of service: 03/02/2025
+
+Description                              Code    Qty   Amount
+Emergency dept visit, level 4            99284    1    $1,850.00
+Chest X-ray, 2 views                     71046    1      $420.00
+Chest X-ray, 2 views                     71046    1      $420.00
+IV infusion, hydration, initial hour     96360    1    $2,850.00
+Supplies                                          1      $310.00
+Basic metabolic panel                    80048    1      $145.00
+
+Total charges:                                         $5,995.00
+Insurance adjustments:                                     $0.00
+Insurance payments:                                        $0.00
+Amount due:                                            $5,995.00
