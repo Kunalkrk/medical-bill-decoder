@@ -116,13 +116,22 @@ export function validateSchema(obj) {
 
 const normalizeWs = (s) => s.replace(/\s+/g, " ").trim();
 
-/** Drop flags whose quote is not found verbatim (whitespace-normalized) in the redacted bill. */
+// Models sometimes join several quoted lines with a separator ("A / B", "A | B", "A ... B").
+const QUOTE_SEPARATORS = /\n|\s\/\s|\s\|\s|\s*(?:\.{3}|\u2026)\s*/;
+
+/** True if the quote, or each separator-joined piece of it, appears verbatim (whitespace-normalized) in the text. */
+function quoteIsGrounded(quote, haystack) {
+  const whole = normalizeWs(quote);
+  if (whole === "") return false;
+  if (haystack.includes(whole)) return true;
+  const pieces = quote.split(QUOTE_SEPARATORS).map(normalizeWs).filter(Boolean);
+  return pieces.length > 1 && pieces.every((p) => haystack.includes(p));
+}
+
+/** Drop flags whose quote is not found verbatim in the redacted bill. */
 export function dropUnsupportedFlags(result, redactedText) {
   const haystack = normalizeWs(redactedText);
-  const flags = result.flags.filter((f) => {
-    const q = normalizeWs(f.quote);
-    return q !== "" && haystack.includes(q);
-  });
+  const flags = result.flags.filter((f) => quoteIsGrounded(f.quote, haystack));
   return { result: { ...result, flags }, flagsDropped: result.flags.length - flags.length };
 }
 
@@ -141,7 +150,7 @@ const ADVICE_RULES = [
   {
     name: "financial_directive",
     re: /\b(?:do not|don't|dont|never|refuse to|should not|shouldn't)\s+pay\b|\byou (?:do not|don't) (?:owe|have to pay)\b|\byou (?:should|must) (?:pay|dispute|refuse)\b/i,
-    neutral: "Please confirm the amounts with your billing department before paying.",
+    neutral: "Questions about these amounts are best raised with the billing department.",
   },
   {
     name: "fraud_accusation",
@@ -164,6 +173,8 @@ function sanitizeString(s, hits) {
     const neutral = rule.neutral && !seen.has(rule.neutral) ? rule.neutral : "";
     if (neutral) seen.add(neutral);
     parts[i] = neutral;
+    // The neutral text carries its own punctuation, so drop the one that followed the removed sentence.
+    if (i + 1 < parts.length) parts[i + 1] = parts[i + 1].replace(/^[.!?]+/, "");
   }
   return changed ? parts.join("").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim() : s;
 }
