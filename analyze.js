@@ -1,6 +1,13 @@
 // Bill analysis logic. Importable without starting the server (used by server.js and scripts/eval.js).
 
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  runInputGuardrails,
+  runOutputGuardrails,
+  validateSchema,
+  notABillResponse,
+  buildGuardrailsReport,
+} from "./guardrails.js";
 
 export const MODEL = "claude-sonnet-5-5";
 export const MAX_BILL_CHARS = 15000;
@@ -81,49 +88,66 @@ export function parseModelJson(raw) {
   }
 }
 
-function hasExpectedShape(r) {
-  return (
-    r !== null &&
-    typeof r === "object" &&
-    r.summary && typeof r.summary === "object" &&
-    Array.isArray(r.lineItems) &&
-    Array.isArray(r.flags) &&
-    Array.isArray(r.questionsToAsk) &&
-    r.draftMessage && typeof r.draftMessage === "object" &&
-    typeof r.limitations === "string"
-  );
-}
+const logEvent = (event, fields) => console.log(JSON.stringify({ event, ...fields }));
 
-/**
- * Analyze pasted bill text. Returns the result object described in the schema above.
- * Throws AnalyzeError (status + user-safe message) on any failure. Never logs billText.
- */
-export async function analyzeBill(billText) {
-  validateBillText(billText);
-  const anthropic = getClient();
-
+async function callModel(anthropic, redactedText) {
   // Stop the bill from closing the wrapper tag early.
-  const safeText = billText.replaceAll(/<\/?\s*bill_text\s*>/gi, "");
-
-  let response;
+  const safeText = redactedText.replaceAll(/<\/?\s*bill_text\s*>/gi, "");
   try {
-    response = await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: `<bill_text>\n${safeText}\n</bill_text>` }],
     });
+    return {
+      raw: response.content.filter((b) => b.type === "text").map((b) => b.text).join(""),
+      stopReason: response.stop_reason,
+    };
   } catch (err) {
     // Log status only; error objects may echo request content.
-    console.error(JSON.stringify({ event: "claude_error", status: err?.status ?? null }));
+    logEvent("claude_error", { status: err?.status ?? null });
     throw new AnalyzeError(502, "We couldn't analyze your bill right now. Please try again in a moment.");
   }
+}
 
-  const raw = response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
-  const result = parseModelJson(raw);
-  if (!hasExpectedShape(result)) {
-    console.error(JSON.stringify({ event: "bad_model_output", stopReason: response.stop_reason }));
-    throw new AnalyzeError(502, "We couldn't read the analysis result. Please try again.");
+/**
+ * Analyze pasted bill text. Returns the schema above plus `disclaimer` and `guardrails`.
+ * Throws AnalyzeError (status + user-safe message) on failure. Never logs billText or model output.
+ */
+export async function analyzeBill(billText) {
+  validateBillText(billText);
+
+  // Input guardrails: redact PII, check bill-likeness, detect injection (logged, not blocked).
+  const input = runInputGuardrails(billText);
+  logEvent("guardrails_input", {
+    pii: input.piiRedacted,
+    injectionTriggers: input.injectionTriggers,
+    billLike: input.billLike,
+  });
+  if (!input.billLike) return notABillResponse(input);
+
+  const anthropic = getClient();
+
+  // Model call with schema validation; retry once on unparseable or invalid output.
+  let validated = null;
+  for (let attempt = 1; attempt <= 2 && !validated; attempt++) {
+    const { raw, stopReason } = await callModel(anthropic, input.redactedText);
+    const check = validateSchema(parseModelJson(raw));
+    if (check.ok) validated = check.data;
+    else logEvent("bad_model_output", { attempt, stopReason });
   }
-  return result;
+  if (!validated) throw new AnalyzeError(502, "We couldn't read the analysis result. Please try again.");
+
+  // Output guardrails: drop unsupported flags, sanitize advice-like text, append disclaimer.
+  const out = runOutputGuardrails(validated, input.redactedText);
+  logEvent("guardrails_output", {
+    flagsDropped: out.flagsDropped,
+    textSanitized: out.textSanitized,
+    sanitizerTriggers: out.sanitizerTriggers,
+  });
+  return {
+    ...out.result,
+    guardrails: buildGuardrailsReport(input, { flagsDropped: out.flagsDropped, textSanitized: out.textSanitized }),
+  };
 }
