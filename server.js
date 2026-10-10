@@ -7,7 +7,9 @@ import rateLimit from "express-rate-limit";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { analyzeBill, AnalyzeError, MODEL } from "./analyze.js";
+import { recordRequest, getMetrics } from "./metrics.js";
 
 const SAMPLES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "samples");
 const PORT = process.env.PORT || 3000;
@@ -19,6 +21,12 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,h
 const app = express();
 app.set("trust proxy", 1); // Render sits behind a proxy; needed for per-IP rate limiting
 
+app.use((req, res, next) => {
+  req.id = randomUUID();
+  res.setHeader("X-Request-Id", req.id);
+  next();
+});
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -29,8 +37,6 @@ app.use(
   })
 );
 app.use(express.json({ limit: "100kb" }));
-// TODO: request id + metadata-only logging middleware (never log bill text or output)
-// TODO: in-memory metrics counters
 
 // TODO: GET /api/health — liveness for Render (e.g. { status: "ok" })
 app.get("/api/samples", async (req, res) => {
@@ -48,7 +54,8 @@ app.get("/api/samples", async (req, res) => {
   }
 });
 
-// TODO: GET /api/metrics — aggregate counters as JSON
+app.get("/api/metrics", (req, res) => res.json(getMetrics()));
+
 const analyzeLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 10,
@@ -59,18 +66,37 @@ const analyzeLimiter = rateLimit({
 
 app.post("/api/analyze", analyzeLimiter, async (req, res) => {
   const started = Date.now();
-  const billText = req.body?.billText;
+  const meta = {};
+  let status = 200;
+  let body;
   try {
-    const result = await analyzeBill(billText);
-    // Metadata only: never log billText or model output.
-    console.log(JSON.stringify({ event: "analyze", status: 200, inputChars: billText.length, flags: result.flags.length, ms: Date.now() - started }));
-    res.json(result);
+    body = await analyzeBill(req.body?.billText, meta);
   } catch (err) {
-    const status = err instanceof AnalyzeError ? err.status : 500;
-    const message = err instanceof AnalyzeError ? err.message : "Something went wrong. Please try again.";
-    console.log(JSON.stringify({ event: "analyze", status, ms: Date.now() - started }));
-    res.status(status).json({ error: message });
+    const known = err instanceof AnalyzeError;
+    status = known ? err.status : 500;
+    meta.error = known ? err.message : "Internal error"; // static, user-safe strings only
+    body = { error: known ? err.message : "Something went wrong. Please try again." };
   }
+  // One metadata-only log line per call: never bill text, model output, or PII.
+  const entry = {
+    requestId: req.id,
+    timestamp: new Date().toISOString(),
+    latencyMs: Date.now() - started,
+    model: meta.model ?? MODEL,
+    inputTokens: meta.inputTokens ?? 0,
+    outputTokens: meta.outputTokens ?? 0,
+    billLengthChars: meta.billLengthChars ?? 0,
+    lineItemCount: meta.lineItemCount ?? 0,
+    flagCount: meta.flagCount ?? 0,
+    flagsDropped: meta.flagsDropped ?? 0,
+    piiRedactedCount: meta.piiRedactedCount ?? 0,
+    injectionDetected: meta.injectionDetected ?? false,
+    rejectedAsNonBill: meta.rejectedAsNonBill ?? false,
+    error: meta.error ?? null,
+  };
+  console.log(JSON.stringify(entry));
+  recordRequest(entry);
+  res.status(status).json(body);
 });
 
 // Malformed JSON bodies etc.

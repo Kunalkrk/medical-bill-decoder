@@ -88,8 +88,6 @@ export function parseModelJson(raw) {
   }
 }
 
-const logEvent = (event, fields) => console.log(JSON.stringify({ event, ...fields }));
-
 async function callModel(anthropic, redactedText) {
   // Stop the bill from closing the wrapper tag early.
   const safeText = redactedText.replaceAll(/<\/?\s*bill_text\s*>/gi, "");
@@ -102,50 +100,63 @@ async function callModel(anthropic, redactedText) {
     });
     return {
       raw: response.content.filter((b) => b.type === "text").map((b) => b.text).join(""),
-      stopReason: response.stop_reason,
+      usage: response.usage,
     };
-  } catch (err) {
-    // Log status only; error objects may echo request content.
-    logEvent("claude_error", { status: err?.status ?? null });
+  } catch {
+    // Don't keep the error object: it may echo request content.
     throw new AnalyzeError(502, "We couldn't analyze your bill right now. Please try again in a moment.");
   }
 }
 
 /**
  * Analyze pasted bill text. Returns the schema above plus `disclaimer` and `guardrails`.
- * Throws AnalyzeError (status + user-safe message) on failure. Never logs billText or model output.
+ * Throws AnalyzeError (status + user-safe message) on failure. Never logs anything.
+ *
+ * `meta` is filled in as the call proceeds, with counts and flags only (never text), so the
+ * caller can log and record metrics even when this throws.
  */
-export async function analyzeBill(billText) {
+export async function analyzeBill(billText, meta = {}) {
+  Object.assign(meta, {
+    model: MODEL,
+    billLengthChars: typeof billText === "string" ? billText.length : 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    lineItemCount: 0,
+    flagCount: 0,
+    flagsDropped: 0,
+    piiRedactedCount: 0,
+    injectionDetected: false,
+    rejectedAsNonBill: false,
+  });
   validateBillText(billText);
 
-  // Input guardrails: redact PII, check bill-likeness, detect injection (logged, not blocked).
+  // Input guardrails: redact PII, check bill-likeness, detect injection (not blocked).
   const input = runInputGuardrails(billText);
-  logEvent("guardrails_input", {
-    pii: input.piiRedacted,
-    injectionTriggers: input.injectionTriggers,
-    billLike: input.billLike,
-  });
-  if (!input.billLike) return notABillResponse(input);
+  meta.piiRedactedCount = input.piiRedacted.total;
+  meta.injectionDetected = input.injectionTriggers.length > 0;
+  if (!input.billLike) {
+    meta.rejectedAsNonBill = true;
+    return notABillResponse(input);
+  }
 
   const anthropic = getClient();
 
   // Model call with schema validation; retry once on unparseable or invalid output.
   let validated = null;
   for (let attempt = 1; attempt <= 2 && !validated; attempt++) {
-    const { raw, stopReason } = await callModel(anthropic, input.redactedText);
+    const { raw, usage } = await callModel(anthropic, input.redactedText);
+    meta.inputTokens += usage?.input_tokens ?? 0;
+    meta.outputTokens += usage?.output_tokens ?? 0;
     const check = validateSchema(parseModelJson(raw));
     if (check.ok) validated = check.data;
-    else logEvent("bad_model_output", { attempt, stopReason });
   }
   if (!validated) throw new AnalyzeError(502, "We couldn't read the analysis result. Please try again.");
 
   // Output guardrails: drop unsupported flags, sanitize advice-like text, append disclaimer.
   const out = runOutputGuardrails(validated, input.redactedText);
-  logEvent("guardrails_output", {
-    flagsDropped: out.flagsDropped,
-    textSanitized: out.textSanitized,
-    sanitizerTriggers: out.sanitizerTriggers,
-  });
+  meta.lineItemCount = out.result.lineItems.length;
+  meta.flagCount = out.result.flags.length;
+  meta.flagsDropped = out.flagsDropped;
   return {
     ...out.result,
     guardrails: buildGuardrailsReport(input, { flagsDropped: out.flagsDropped, textSanitized: out.textSanitized }),
