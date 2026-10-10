@@ -30,8 +30,8 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow non-browser clients (no Origin header) and listed origins.
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+      // Allow non-browser clients (no Origin header), listed origins, or everything if "*" is listed.
+      if (!origin || ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
       callback(new Error("Origin not allowed by CORS"));
     },
   })
