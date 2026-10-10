@@ -1,0 +1,17 @@
+{
+  "name": "medical-bill-decoder",
+  "version": "0.1.0",
+  "description": "Paste a hospital bill or EOB; get a plain-English explanation, possible-issue flags, a summary, and a draft message.",
+  "type": "module",
+  "main": "server.js",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "eval": "node scripts/eval.js"
+  },
+  "license": "UNLICENSED"
+}
